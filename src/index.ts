@@ -64,7 +64,7 @@ const JOBS: (() => Promise<unknown>)[] = [
   // nativeSell, // FIXME: Throws error creating the eth flow order. Doesn't recognize 'gas' property - I believe expects 'gasLimit')
   //
   // approveTokenMainnet,
-  getQuoteAndPostOrderMainnet,
+  // getQuoteAndPostOrderMainnet,
   // swapAndBridgeUsingOmnibridge,
   // swapAndBridgeUsingXdaiBridge,
   //
@@ -75,7 +75,7 @@ const JOBS: (() => Promise<unknown>)[] = [
   // swapAndBridgeAccrossArbitrum,
   // swapAndBridgeAccrossMainnet,
 
-  // swapAndBridgeSdk,
+  swapAndBridgeSdk,
   // getOrderbookQuote,
   // getOrderbookQuoteWithAppData,
   // getTradingQuote,

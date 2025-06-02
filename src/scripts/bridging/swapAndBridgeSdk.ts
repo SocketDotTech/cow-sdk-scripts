@@ -25,8 +25,8 @@ export async function run() {
 
   // Buy token (WETH in Base)
   const buyTokenChainId = SupportedChainId.BASE;
-  const buyTokenAddress = base.ETH_ADDRESS;
-  const buyTokenDecimals = 18;
+  const buyTokenAddress = base.USDC_ADDRESS;
+  const buyTokenDecimals = 6;
 
   // Amount to sell
   const sellAmount = ethers.utils.parseUnits('1', sellTokenDecimals).toBigInt();
