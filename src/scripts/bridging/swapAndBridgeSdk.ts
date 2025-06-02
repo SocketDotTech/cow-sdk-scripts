@@ -1,21 +1,21 @@
-import { base, arbitrum, APP_CODE } from "../../const";
+import { APP_CODE, arbitrum, base, NATIVE_TOKEN_ADDRESS } from '../../const';
 
 import {
-  SupportedChainId,
-  BridgingSdk,
-  AcrossBridgeProvider,
-  QuoteBridgeRequest,
-  OrderKind,
   AccountAddress,
   assertIsBridgeQuoteAndPost,
-  getChainInfo,
   BridgeQuoteAndPost,
-} from "@cowprotocol/cow-sdk";
+  BridgingSdk,
+  BungeeBridgeProvider,
+  getChainInfo,
+  OrderKind,
+  QuoteBridgeRequest,
+  SupportedChainId,
+} from '@cowprotocol/cow-sdk';
 
-import { ethers } from "ethers";
+import { ethers } from 'ethers';
 
-import { confirm, getRpcProvider, getWallet, jsonReplacer } from "../../utils";
-import { getErc20Contract } from "../../contracts/erc20";
+import { getErc20Contract } from '../../contracts/erc20';
+import { confirm, getRpcProvider, getWallet, jsonReplacer } from '../../utils';
 
 export async function run() {
   // Sell token (USDC in Arbitrum)
@@ -25,21 +25,24 @@ export async function run() {
 
   // Buy token (WETH in Base)
   const buyTokenChainId = SupportedChainId.BASE;
-  const buyTokenAddress = base.WETH_ADDRESS;
+  const buyTokenAddress = base.ETH_ADDRESS;
   const buyTokenDecimals = 18;
 
   // Amount to sell
-  const sellAmount = ethers.utils.parseUnits("5", sellTokenDecimals).toBigInt();
+  const sellAmount = ethers.utils.parseUnits('1', sellTokenDecimals).toBigInt();
 
   // Get wallet
   const wallet = await getWallet(sellTokenChainId);
 
   // Initialize the Across bridge provider
-  const acrossBridgeProvider = new AcrossBridgeProvider();
-
+  const bungeeBridgeProvider = new BungeeBridgeProvider({
+    apiOptions: {
+      includeBridges: ['cctp'],
+    },
+  });
   // Initialize the SDK with the wallet
   const sdk = new BridgingSdk({
-    providers: [acrossBridgeProvider],
+    providers: [bungeeBridgeProvider],
     enableLogging: true,
     // tradingSdk: new TradingSdk({}, { enableLogging: true }),
   });
@@ -69,28 +72,30 @@ export async function run() {
 
   const { signer, ...restParameters } = parameters;
   console.log(
-    "🕣 Getting quote...",
+    '🕣 Getting quote...',
     JSON.stringify(restParameters, jsonReplacer, 2)
   );
 
-  const quote = await sdk.getQuote(parameters);
+  const quote = await sdk.getQuote(parameters, {
+    quoteSigner: wallet,
+  });
   assertIsBridgeQuoteAndPost(quote);
 
   // Get the symbols for the tokens
   const sourceChainProvider = await getRpcProvider(parameters.sellTokenChainId);
   const targetChainProvider = await getRpcProvider(parameters.buyTokenChainId);
-  const sellTokenSymbol = await getErc20Contract(
+  const sellTokenSymbol = await getTokenSymbol(
     quote.swap.tradeParameters.sellToken,
     sourceChainProvider
-  ).symbol();
-  const intermediateSymbol = await getErc20Contract(
+  );
+  const intermediateSymbol = await getTokenSymbol(
     quote.swap.tradeParameters.buyToken,
     sourceChainProvider
-  ).symbol();
-  const buyTokenSymbol = await getErc20Contract(
+  );
+  const buyTokenSymbol = await getTokenSymbol(
     quote.bridge.tradeParameters.buyTokenAddress,
     targetChainProvider
-  ).symbol();
+  );
 
   // Print the quote
   const quoteString = await formatQuote({
@@ -117,12 +122,14 @@ export async function run() {
     `Sell ${sellAmountFormatted} USDC (Arbitrum) for receive at least ${minReceiveBuyToken} WETH (Base). ok?`
   );
   if (!confirmed) {
-    console.log("🚫 Aborted");
+    console.log('🚫 Aborted');
     return;
   }
 
   // Post the order
-  const orderId = await quote.postSwapOrderFromQuote();
+  const { orderId } = await quote.postSwapOrderFromQuote({
+    quoteSigner: wallet,
+  });
 
   // Print the order creation
   console.log(
@@ -130,12 +137,12 @@ export async function run() {
   );
 
   // Wait for the bridge start
-  console.log("🕣 Waiting for the bridge to start...");
-  console.log("🔗 Across link: <URL>");
+  console.log('🕣 Waiting for the bridge to start...');
+  console.log(`🔗 Socketscan link: https://socketscan.io/tx/${orderId}`);
   // TODO: Implement
 
   // Wait for the bridging to be completed
-  console.log("🕣 Waiting for the bridging to be completed...");
+  console.log('🕣 Waiting for the bridging to be completed...');
   // TODO: Implement
 
   console.log(`🎉 The WETH is now waiting for you in Base`);
@@ -203,7 +210,7 @@ Swap details:
         swap.tradeParameters.buyTokenDecimals,
         intermediateSymbol
       )}
-  - Slippage: ${swap.tradeParameters.slippageBps ?? "default"}
+  - Slippage: ${swap.tradeParameters.slippageBps ?? 'default'}
   - Receiver (cow-shed): ${swap.tradeParameters.receiver}
 
 Bridge details:
@@ -258,7 +265,7 @@ Bridge details:
 
 function formatChainId(chainId: number) {
   const chainInfo = getChainInfo(chainId);
-  return `${chainInfo ? chainInfo.label : "UNKNOWN CHAIN"} (${chainId})`;
+  return `${chainInfo ? chainInfo.label : 'UNKNOWN CHAIN'} (${chainId})`;
 }
 
 function formatToken(address: string, decimals: number, symbol: string) {
@@ -267,4 +274,15 @@ function formatToken(address: string, decimals: number, symbol: string) {
 
 function formatAmount(amount: bigint, decimals: number, symbol: string) {
   return `${ethers.utils.formatUnits(amount, decimals)} ${symbol} (${amount})`;
+}
+
+async function getTokenSymbol(
+  tokenAddress: string,
+  provider: ethers.providers.JsonRpcProvider
+) {
+  if (tokenAddress === NATIVE_TOKEN_ADDRESS) {
+    return 'ETH';
+  }
+  const contract = getErc20Contract(tokenAddress, provider);
+  return contract.symbol();
 }
